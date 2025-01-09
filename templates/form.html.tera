@@ -29,6 +29,8 @@
 <form id="color_form" method="post">
 	<p id="color_picker"></p>
 	<input id="color" name="color" type="color" value="{{ color }}"/>
+	<p>White Channel</p>
+	<input id="white_color" name="white_color" type="color" value="{{ white_color }}"/>
 	<p></p>
 	<button id="color_submit" type="submit">Set</button>
 </form>
@@ -68,8 +70,8 @@
 		return parseInt(hex, 16);
 	}
 
-	function encodeColor(color) {
-		return '#' + num2hex(color['red']) + num2hex(color['green']) + num2hex(color['blue'])
+	function encodeColor(color, white) {
+    		return '#' + num2hex(color['red']) + num2hex(color['green']) + num2hex(color['blue']) + num2hex(white);
 	}
 
 	function decodeColor(str) {
@@ -77,17 +79,22 @@
 			'red': hex2num(str.slice(1, 3)),
 			'green': hex2num(str.slice(3, 5)),
 			'blue': hex2num(str.slice(5, 7)),
+			'white': hex2num(str.slice(7, 9)),  // Weiß-Wert hinzufügen
 		};
 	}
 
 	function submitWebSocket(ev) {
-		ws.send(JSON.stringify(decodeColor(picker.source.value)));
+    		// Weißwert auch an den WebSocket senden
+    		const white = hex2num(document.getElementById('white_color').value.slice(1, 3));
+    		const colorData = decodeColor(picker.source.value);
+    		ws.send(JSON.stringify({
+        	...colorData,
+        	'white': white
+    		}));
 
-		current = picker.source.value;
-
-		document.getElementById(picker.source.name + '_submit').disabled = true;
-
-		ev.preventDefault();
+    		current = picker.source.value;
+	    	document.getElementById(picker.source.name + '_submit').disabled = true;
+    		ev.preventDefault();
 	}
 
 	function connectWebSocket() {
@@ -98,19 +105,20 @@
 		});
 
 		ws.addEventListener('message', (ev) => {
-			const color = JSON.parse(ev.data);
+    			const color = JSON.parse(ev.data);
 
-			if (picker.source.value === current) {
-				const encoded = encodeColor(color);
+    			if (picker.source.value === current) {
+        			const encoded = encodeColor(color, color.white);  // Weiß-Wert einbeziehen
 
-				picker.source.value = encoded;
-				picker.set(color['red'], color['green'], color['blue']);
+        			picker.source.value = encoded;
+        			picker.set(color['red'], color['green'], color['blue']);
 
-				current = encoded;
+        			current = encoded;
 
-				document.getElementById(picker.source.name + '_submit').disabled = true;
-			}
+        			document.getElementById(picker.source.name + '_submit').disabled = true;
+    			}
 		});
+
 
 		ws.addEventListener('close', () => {
 			document.getElementById(picker.source.name + '_form').removeEventListener('submit', submitWebSocket);
