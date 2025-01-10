@@ -45,6 +45,26 @@ use tokio_tungstenite::tungstenite::{Error as WSError, Message as WSMessage};
 use tokio_tungstenite::WebSocketStream;
 
 use yansi::Paint;
+#[derive(Debug, Clone)]
+struct ColorWithWhite {
+    red: u8,
+    green: u8,
+    blue: u8,
+    alpha: u8, 
+    white: u8,  // Weißwert hier hinzufügen
+}
+
+impl From<OscColor> for ColorWithWhite {
+    fn from(color: OscColor) -> Self {
+        ColorWithWhite {
+            red: color.red,
+            green: color.green,
+            blue: color.blue,
+            alpha: color.alpha,
+            white: 0,  // Setze den Weißwert standardmäßig auf 0 oder einen anderen Wert
+        }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
