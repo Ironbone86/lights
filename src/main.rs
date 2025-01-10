@@ -46,22 +46,31 @@ use tokio_tungstenite::WebSocketStream;
 
 use yansi::Paint;
 #[derive(Debug, Clone)]
-struct ColorWithWhite {
-    red: u8,
-    green: u8,
-    blue: u8,
-    alpha: u8, 
-    white: u8,  // Weißwert hier hinzufügen
+pub struct ColorWithWhite {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+    pub white: u8, // Weißkanal
 }
 
-impl From<OscColor> for ColorWithWhite {
-    fn from(color: OscColor) -> Self {
-        ColorWithWhite {
-            red: color.red,
-            green: color.green,
-            blue: color.blue,
-            alpha: color.alpha,
-            white: 0,  // Setze den Weißwert standardmäßig auf 0 oder einen anderen Wert
+impl From<OscType> for ColorWithWhite {
+    fn from(osc_type: OscType) -> Self {
+        // Erwartet ein Array mit 4 Werten (Red, Green, Blue, White)
+        if let OscType::Array(args) = osc_type {
+            let red = args.get(0).and_then(|v| if let OscType::Int(val) = v { Some(*val as u8) } else { None }).unwrap_or(0);
+            let green = args.get(1).and_then(|v| if let OscType::Int(val) = v { Some(*val as u8) } else { None }).unwrap_or(0);
+            let blue = args.get(2).and_then(|v| if let OscType::Int(val) = v { Some(*val as u8) } else { None }).unwrap_or(0);
+            let white = args.get(3).and_then(|v| if let OscType::Int(val) = v { Some(*val as u8) } else { None }).unwrap_or(0);
+
+            ColorWithWhite { red, green, blue, white }
+        } else {
+            // Standardfarbe, falls kein Array
+            ColorWithWhite {
+                red: 0,
+                green: 0,
+                blue: 0,
+                white: 0,
+            }
         }
     }
 }
