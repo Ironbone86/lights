@@ -45,35 +45,6 @@ use tokio_tungstenite::tungstenite::{Error as WSError, Message as WSMessage};
 use tokio_tungstenite::WebSocketStream;
 
 use yansi::Paint;
-#[derive(Debug, Clone)]
-pub struct ColorWithWhite {
-    pub red: u8,
-    pub green: u8,
-    pub blue: u8,
-    pub white: u8, // Weißkanal
-}
-
-impl From<OscType> for ColorWithWhite {
-    fn from(osc_type: OscType) -> Self {
-        // Erwartet ein Array mit 4 Werten (Red, Green, Blue, White)
-        if let OscType::Array(args) = osc_type {
-            let red = args.get(0).and_then(|v| if let OscType::Int(val) = v { Some(*val as u8) } else { None }).unwrap_or(0);
-            let green = args.get(1).and_then(|v| if let OscType::Int(val) = v { Some(*val as u8) } else { None }).unwrap_or(0);
-            let blue = args.get(2).and_then(|v| if let OscType::Int(val) = v { Some(*val as u8) } else { None }).unwrap_or(0);
-            let white = args.get(3).and_then(|v| if let OscType::Int(val) = v { Some(*val as u8) } else { None }).unwrap_or(0);
-
-            ColorWithWhite { red, green, blue, white }
-        } else {
-            // Standardfarbe, falls kein Array
-            ColorWithWhite {
-                red: 0,
-                green: 0,
-                blue: 0,
-                white: 0,
-            }
-        }
-    }
-}
 
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
@@ -81,7 +52,6 @@ struct Color {
     red: u8,
     green: u8,
     blue: u8,
-    white: u8,
 }
 
 #[derive(Debug)]
@@ -114,7 +84,7 @@ impl FromStr for Color {
     type Err = ColorError;
 
     fn from_str(color: &str) -> Result<Self, Self::Err> {
-        if &color[0..1] != "#" || (color.len() != 7 && color.len() != 9) {
+        if &color[0..1] != "#" || color.len() != 7 {
             return Err(Self::Err {
                 kind: ColorErrorKind::BadFormat,
             });
@@ -125,14 +95,7 @@ impl FromStr for Color {
             let green = u8::from_str_radix(&color[3..5], 16)?;
             let blue = u8::from_str_radix(&color[5..7], 16)?;
 
-            // Wenn der String 9 Zeichen enthält, extrahiere den Weiß-Wert
-            let white = if color.len() == 9 {
-                u8::from_str_radix(&color[7..9], 16)?
-            } else {
-                0 // Standardwert für Weiß, wenn der Kanal nicht angegeben wird
-            };
-
-            Ok(Color { red, green, blue, white })
+            Ok(Color { red, green, blue })
         }();
 
         match result {
@@ -143,7 +106,6 @@ impl FromStr for Color {
         }
     }
 }
-
 
 #[rocket::async_trait]
 impl<'r> FromFormField<'r> for Color {
@@ -157,7 +119,7 @@ impl<'r> FromFormField<'r> for Color {
 
 impl Display for Color {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "#{:02x}{:02x}{:02x}{:02x}", self.red, self.green, self.blue, self.white)
+        write!(f, "#{:02x}{:02x}{:02x}", self.red, self.green, self.blue)
     }
 }
 
@@ -189,7 +151,6 @@ struct Output {
     red: OutputPin,
     green: OutputPin,
     blue: OutputPin,
-    white: OutputPin,
 }
 
 impl Output {
@@ -200,8 +161,6 @@ impl Output {
             .set_pwm_frequency(self.frequency, color.green as f64 / 255.0)?;
         self.blue
             .set_pwm_frequency(self.frequency, color.blue as f64 / 255.0)?;
-        self.white
-            .set_pwm_frequency(self.frequency, color.white as f64 / 255.0)?;
 
         Ok(())
     }
@@ -229,7 +188,6 @@ impl Lights {
                 red: 0,
                 green: 0,
                 blue: 0,
-                white: 0,
             },
         };
 
@@ -239,7 +197,6 @@ impl Lights {
                 red: 0,
                 green: 0,
                 blue: 0,
-                white: 0,
             })
             .expect("Lights output failure");
 
@@ -252,7 +209,6 @@ impl Lights {
                 red: 0,
                 green: 0,
                 blue: 0,
-                white: 0,
             },
             Pattern::Solid(color) => *color,
             Pattern::Custom(frames) => {
@@ -261,7 +217,6 @@ impl Lights {
                         red: 0,
                         green: 0,
                         blue: 0,
-                        white: 0,
                     }
                 } else {
                     frames[self.frame].color
@@ -288,7 +243,6 @@ impl Lights {
                 red: 0,
                 green: 0,
                 blue: 0,
-                white: 0,
             },
             Pattern::Solid(color) => *color,
             Pattern::Custom(frames) => {
@@ -300,7 +254,6 @@ impl Lights {
                         red: 0,
                         green: 0,
                         blue: 0,
-                        white: 0,
                     }
                 } else {
                     if self.frame >= frames.len() {
@@ -609,29 +562,26 @@ async fn osc_server(lights: SharedLights) {
                 Ok(packet) => match packet {
                     (_, OscPacket::Message(msg)) => match msg.addr.as_ref() {
                         "/color" => match &msg.args[..] {
-                            [OscType::Int(red), OscType::Int(green), OscType::Int(blue), OscType::Int(white)] => {
+                            [OscType::Int(red), OscType::Int(green), OscType::Int(blue)] => {
                                 lights.lock().await.set(Color {
                                     red: *red as u8,
                                     green: *green as u8,
                                     blue: *blue as u8,
-                                    white: *white as u8,
                                 });
                             }
-                            [OscType::Float(red), OscType::Float(green), OscType::Float(blue), OscType::Float(white)] => {
+                            [OscType::Float(red), OscType::Float(green), OscType::Float(blue)] => {
                                 lights.lock().await.set(Color {
                                     red: *red as u8,
                                     green: *green as u8,
                                     blue: *blue as u8,
-                                    white: *white as u8,
                                 });
                             }
-                            [OscType::Double(red), OscType::Double(green), OscType::Double(blue), OscType::Double(white)] =>
+                            [OscType::Double(red), OscType::Double(green), OscType::Double(blue)] =>
                             {
                                 lights.lock().await.set(Color {
                                     red: *red as u8,
                                     green: *green as u8,
                                     blue: *blue as u8,
-                                    white: *white as u8,
                                 });
                             }
                             [OscType::Color(color)] => {
@@ -639,7 +589,6 @@ async fn osc_server(lights: SharedLights) {
                                     red: color.red,
                                     green: color.green,
                                     blue: color.blue,
-                                    white: color.white,
                                 });
                             }
                             _ => {
@@ -655,29 +604,26 @@ async fn osc_server(lights: SharedLights) {
                             }
                         },
                         "/pattern/solid" => match &msg.args[..] {
-                            [OscType::Int(red), OscType::Int(green), OscType::Int(blue), OscType::Int(white)] => {
+                            [OscType::Int(red), OscType::Int(green), OscType::Int(blue)] => {
                                 lights.lock().await.set_pattern(&Pattern::Solid(Color {
                                     red: *red as u8,
                                     green: *green as u8,
                                     blue: *blue as u8,
-                                    white: *white as u8,
                                 }));
                             }
-                            [OscType::Float(red), OscType::Float(green), OscType::Float(blue), OscType::Float(white)] => {
+                            [OscType::Float(red), OscType::Float(green), OscType::Float(blue)] => {
                                 lights.lock().await.set_pattern(&Pattern::Solid(Color {
                                     red: *red as u8,
                                     green: *green as u8,
                                     blue: *blue as u8,
-                                    white: *white as u8,
                                 }));
                             }
-                            [OscType::Double(red), OscType::Double(green), OscType::Double(blue), OscType::Double(white)] =>
+                            [OscType::Double(red), OscType::Double(green), OscType::Double(blue)] =>
                             {
                                 lights.lock().await.set_pattern(&Pattern::Solid(Color {
                                     red: *red as u8,
                                     green: *green as u8,
                                     blue: *blue as u8,
-                                    white: *white as u8,
                                 }));
                             }
                             [OscType::Color(color)] => {
@@ -685,7 +631,6 @@ async fn osc_server(lights: SharedLights) {
                                     red: color.red,
                                     green: color.green,
                                     blue: color.blue,
-                                    white: color.white,
                                 }));
                             }
                             _ => {
@@ -732,7 +677,6 @@ fn rocket() -> _ {
         red: 242,
         green: 155,
         blue: 212,
-        white: 0,
     };
 
     let chronon = Duration::from_millis(10);
@@ -746,7 +690,6 @@ fn rocket() -> _ {
             red: gpio.get(17).unwrap().into_output(),
             green: gpio.get(27).unwrap().into_output(),
             blue: gpio.get(22).unwrap().into_output(),
-            white: gpio.get(18).unwrap().into_output(),
         },
         Pattern::Solid(initial),
     )));
