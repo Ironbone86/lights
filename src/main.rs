@@ -610,7 +610,7 @@ async fn osc_server(lights: SharedLights) {
                                     red: color.red,
                                     green: color.green,
                                     blue: color.blue,
-                                    white: color.white,
+                                    white: color.alpha,
                                 });
                             }
                             _ => {
@@ -656,7 +656,7 @@ async fn osc_server(lights: SharedLights) {
                                     red: color.red,
                                     green: color.green,
                                     blue: color.blue,
-                                    white: color.white,
+                                    white: color.alpha,
                                 }));
                             }
                             _ => {
